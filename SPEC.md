@@ -16,7 +16,7 @@ Status: M1-M5 implemented; M6 is later. Decisions marked **[assumed]** were my d
 ## Non-goals (v1)
 
 - No MCP server. Agents call the CLI. An MCP wrapper can come later.
-- No remote machines, no Windows or macOS support. Linux only **[assumed]**.
+- No remote machines or Windows support. Linux and macOS (Apple Silicon and Intel) are supported.
 - No Kubernetes, no Swarm; compose only.
 - No reverse proxy or pretty hostnames.
 - No log aggregation beyond per-server log files.
@@ -37,7 +37,7 @@ Status: M1-M5 implemented; M6 is later. Decisions marked **[assumed]** were my d
 | `devrun notify [name] "message" [--sound none|done|request] [--json]` | Flag this server as needing human inspection: `herdr notification show` with URL, project, worktree and message. Returns immediately. Records `flagged` in the registry so `ls`/`watch` highlight it. |
 | `devrun clear [name]` | Remove the flag after you have inspected it. |
 | `devrun hook install [--force]` / `devrun hook wrapper` | Install a git `post-checkout`/worktree-removal hook (and print the `git worktree remove` wrapper to use) that runs `devrun stop` for a worktree that is being deleted. Git has no native hook for worktree removal, so v1 also checks in `gc` and on every `ls` for entries whose worktree directory no longer exists and stops those. |
-| `devrun doctor [--json]` | Check herdr is on PATH, the state dir is writable, `ss` is available and the port range is free. |
+| `devrun doctor [--json]` | Check herdr is on PATH, the state dir is writable, native listener tools are available and the port range is free. |
 
 ## Data model
 
@@ -67,7 +67,7 @@ Registry: `~/.local/state/devrun/registry.json`, guarded by an `flock` lockfile.
 
 - Range **41000-41999** **[assumed]**, chosen to stay clear of the usual dev-server ports (3000, 4200, 5173, 8000-8999).
 - Stable: port = lowest free port from a hash of the key, then probed. The mapping is persisted, so the same worktree gets the same port every run.
-- "Free" means not in the registry **and** not listening (`ss -ltn`), so processes not started by devrun are respected.
+- "Free" means not in the registry **and** not listening (Linux `/proc/net/tcp{,6}` with `ss` fallback; macOS `lsof` plus IPv4/IPv6 bind probes), so processes not started by devrun are respected.
 - The registry lock covers allocate-and-start, so two agents starting at once can't get the same port.
 
 ## Docker / compose mode
@@ -94,9 +94,10 @@ services:
 
 ## Process management
 
+- Track process identity with kernel start time (clock ticks on Linux, microsecond timestamps on macOS) so recycled PIDs are never treated as the original process.
 - Start with `setsid` so the whole tree (npm, then vite, then node) shares a process group. Stop kills the group.
 - Liveness: PID alive **and** its process group is listening on the recorded port. If the PID is alive but the port isn't listening, state is `starting` for the first N seconds and `hung` after that.
-- Detect port drift: if the framework ignored `PORT` and bound elsewhere, find the actual listening port of the group via `ss -ltnp` and report a warning in `up`.
+- Detect port drift: if the framework ignored `PORT` and bound elsewhere, find the actual listening port of the group via `/proc` socket ownership on Linux or `lsof` on macOS and report a warning in `up`.
 - Servers survive the agent's session ending. `gc` and `stop` are the cleanup paths. Optional `--ttl 4h` auto-expiry is deferred.
 
 ## herdr integration
@@ -121,7 +122,7 @@ services:
 
 **Non-functional:**
 - Single static Go binary, no runtime dependencies. Go 1.19 is installed, so no generics-heavy or newer-stdlib code.
-- Only external tools: `git`, and optionally `herdr` and `docker` (with the compose plugin). Listening ports come from direct `/proc/net/tcp` parsing; `ss` is a fallback.
+- Only external tools: `git`, and optionally `herdr` and `docker` (with the compose plugin). On Linux, listening ports come from direct `/proc/net/tcp` parsing; `ss` is a fallback. macOS uses built-in `lsof` for listener ownership and probes candidate ports with IPv4/IPv6 binds on wildcard and local addresses during allocation; process identity uses kernel `sysctl` start timestamps. Ownership detection and orphan cleanup are limited to processes visible to the invoking user.
 - Registry operations under 50ms. `ls` must not block on dead processes.
 - Never kills a PID it didn't start. `stop` verifies the PID's start time against the registry to avoid PID-reuse kills.
 - Bind-address note: `devrun` doesn't change what interface the app listens on. Document that `127.0.0.1` is the safe default.

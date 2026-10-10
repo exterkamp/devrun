@@ -157,7 +157,11 @@ func TestStartLaunchesComposeUpWithEnv(t *testing.T) {
 	if !strings.Contains(line, "WEB_PORT=41237") || !strings.Contains(line, "CPN="+want) {
 		t.Fatalf("env: %q", line)
 	}
-	if !strings.Contains(line, "PWD="+e.Worktree) {
+	physicalWorktree, err := filepath.EvalSymlinks(e.Worktree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(line, "PWD="+physicalWorktree) {
 		t.Fatalf("cwd: %q", line)
 	}
 }

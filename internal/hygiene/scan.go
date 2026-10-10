@@ -20,11 +20,11 @@ type Listener struct {
 	Port  int
 	PID   int
 	PGID  int
-	Start uint64 // /proc start time of PID; guards against PID reuse
+	Start uint64 // platform process start time; guards against PID reuse
 }
 
-// Scanner reads listener ownership from a /proc tree. The zero value reads
-// /proc; tests point Root at a fake tree.
+// Scanner reads native listener ownership. Tests can point Root at a fake
+// /proc tree on either supported platform.
 type Scanner struct{ Root string }
 
 func (s Scanner) root() string {
@@ -92,7 +92,7 @@ func parseStat(s string) (state byte, pgrp int, start uint64, ok bool) {
 	return f[0][0], g, st, true
 }
 
-func (s Scanner) stat(pid int) (state byte, pgrp int, start uint64, ok bool) {
+func (s Scanner) procStat(pid int) (state byte, pgrp int, start uint64, ok bool) {
 	data, err := os.ReadFile(filepath.Join(s.root(), strconv.Itoa(pid), "stat"))
 	if err != nil {
 		return
@@ -102,7 +102,7 @@ func (s Scanner) stat(pid int) (state byte, pgrp int, start uint64, ok bool) {
 
 // Listeners returns every (port, process) pair with a LISTEN socket that this
 // user can see. Zombies are skipped. Sorted by port, then PID.
-func (s Scanner) Listeners() ([]Listener, error) {
+func (s Scanner) procListeners() ([]Listener, error) {
 	inodes, err := s.listenInodes()
 	if err != nil {
 		return nil, err

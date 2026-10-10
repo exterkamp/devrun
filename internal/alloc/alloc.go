@@ -39,13 +39,15 @@ func RegisterSource(s Source) {
 type Allocator struct {
 	Min, Max int
 	Sources  []Source
+	// Available is an optional final OS bind check for a candidate port.
+	Available func(int) bool
 }
 
 // New returns an Allocator over the default range and all registered sources.
 func New() *Allocator {
 	srcMu.Lock()
 	defer srcMu.Unlock()
-	return &Allocator{Min: MinPort, Max: MaxPort, Sources: append([]Source(nil), globalSources...)}
+	return &Allocator{Min: MinPort, Max: MaxPort, Sources: append([]Source(nil), globalSources...), Available: portAvailable}
 }
 
 func (a *Allocator) bounds() (int, int) {
@@ -119,7 +121,7 @@ func (a *Allocator) Allocate(f *registry.File, key string, names []string) (map[
 	chosen := map[int]bool{}
 	for _, n := range names {
 		rk := ReservationKey(key, n)
-		free := func(p int) bool { return !busy[p] && !chosen[p] }
+		free := func(p int) bool { return !busy[p] && !chosen[p] && (a.Available == nil || a.Available(p)) }
 		port := 0
 		if p, ok := f.Reserved[rk]; ok && p >= lo && p <= hi && free(p) {
 			port = p

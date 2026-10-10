@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 
 	"github.com/exterkamp/devrun/internal/herdr"
@@ -116,14 +117,20 @@ func runDoctor(env *Env) []Check {
 		add("state-dir", levelOK, "%s writable", env.Store.Dir)
 	}
 
-	// Listening ports: /proc is primary, ss only a fallback.
+	// Check the native listener backend.
 	listening, lerr := env.Listening()
 	if lerr != nil {
 		add("listeners", levelFail, "cannot read listening ports: %v", lerr)
 	} else {
 		add("listeners", levelOK, "%d listening port(s) readable", len(listening))
 	}
-	if _, err := exec.LookPath("ss"); err != nil {
+	if runtime.GOOS == "darwin" {
+		if _, err := exec.LookPath("/usr/sbin/lsof"); err != nil {
+			add("lsof", levelFail, "missing /usr/sbin/lsof (required on macOS)")
+		} else {
+			add("lsof", levelOK, "available (macOS native listener detection)")
+		}
+	} else if _, err := exec.LookPath("ss"); err != nil {
 		add("ss", levelWarn, "not found (only a fallback; /proc/net/tcp is used)")
 	} else {
 		add("ss", levelOK, "available")

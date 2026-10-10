@@ -1,6 +1,6 @@
 # devrun
 
-A small CLI that lets parallel coding agents, each on its own git worktree, start dev servers without port collisions. Every server gets a stable port, is recorded with its project, worktree, branch and owner, and can be listed, flagged for a human, and cleaned up. Linux only. See `SPEC.md` for the design.
+A small CLI that lets parallel coding agents, each on its own git worktree, start dev servers without port collisions. Every server gets a stable port, is recorded with its project, worktree, branch and owner, and can be listed, flagged for a human, and cleaned up. Supports Linux and macOS (Apple Silicon and Intel). See `SPEC.md` for the design.
 
 ## Install
 
@@ -8,9 +8,42 @@ A small CLI that lets parallel coding agents, each on its own git worktree, star
 go install github.com/exterkamp/devrun/cmd/devrun@latest
 ```
 
-Or from a checkout: `go build -o ~/.local/bin/devrun ./cmd/devrun`.
+Or from a checkout:
+
+```bash
+mkdir -p ~/.local/bin
+go build -o ~/.local/bin/devrun ./cmd/devrun
+```
+
+Make sure `~/.local/bin` is on your `PATH`.
 
 Needs Go 1.19+ and `git`. `herdr` (notifications, owner detection) and `docker` with the compose plugin (compose mode) are optional. Check the setup with `devrun doctor`.
+
+### macOS setup
+
+Install Go and Git with Homebrew, then build from this checkout:
+
+```bash
+brew install go git
+mkdir -p ~/.local/bin
+go build -o ~/.local/bin/devrun ./cmd/devrun
+export PATH="$HOME/.local/bin:$PATH"
+devrun doctor
+```
+
+Add the `export PATH` line to `~/.zshrc` to keep it in new terminals. If using
+`go install` instead, add `$(go env GOPATH)/bin` to your `PATH`.
+
+macOS uses the built-in `/usr/sbin/lsof`; no Linux
+`ss` utility or `/proc` mount is needed. Process identity is read from the
+kernel with microsecond-resolution start timestamps. Listener ownership for
+port drift and orphan cleanup is limited to processes visible to your user;
+allocation also probes candidate ports with IPv4 and IPv6 binds on wildcard and local addresses, so
+sockets owned by other users are skipped even when their ownership is hidden. Run devrun as your normal user.
+
+For `--compose`, install and start a Docker runtime that supplies
+`docker compose` (for example Docker Desktop). Ordinary process mode needs no
+Docker runtime. Herdr is optional on both platforms.
 
 ## Quick start
 
@@ -63,7 +96,7 @@ Avoid `container_name:` in compose files; it collides across worktrees.
 | `watch [--project P] [--interval 1s] [--once]` | Live view for a herdr pane; flagged rows are highlighted. |
 | `gc [--kill-orphans] [--yes] [--quiet] [--json]` | Drop dead entries, stop servers of removed worktrees, report orphans (listeners in the range with no entry, `devrun-*` compose projects not in the registry). `--kill-orphans` stops them. |
 | `hook install [--force]` / `hook wrapper` | Install a git `post-checkout` hook that runs `gc`; print a `gwt-rm` shell function that stops servers before `git worktree remove`. |
-| `doctor [--json]` | Check herdr, the state dir, `ss` and the port range. |
+| `doctor [--json]` | Check herdr, the state dir, native listener tools and the port range. |
 
 ## Ports
 
@@ -95,4 +128,4 @@ See [docs/agent-guide.md](docs/agent-guide.md) for a copy-paste `CLAUDE.md`/`AGE
 go vet ./... && go test -count=1 ./...
 ```
 
-The end-to-end tests build the binary and use `python3`, `git` and a fake `herdr`; they skip with a message if a tool is missing.
+CI runs the suite on Linux and macOS (Apple Silicon and Intel). The end-to-end tests build the binary and use `python3`, `git` and a fake `herdr`; they skip with a message if a tool is missing.

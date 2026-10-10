@@ -112,8 +112,14 @@ func (Runner) Stop(e registry.Entry, grace time.Duration) error {
 	if pgid <= 0 {
 		pgid = e.PID
 	}
-	if _, start, ok := procStat(e.PID); ok && start != e.PIDStart {
-		return nil // PID reused by someone else; our process is long gone
+	if _, start, ok := procStat(e.PID); ok {
+		if start != e.PIDStart {
+			return nil // PID reused by someone else; our process is long gone
+		}
+	} else if err := syscall.Kill(e.PID, 0); err != syscall.ESRCH {
+		// An unreadable identity is not proof that the leader is gone. Refuse
+		// to signal a group whose existing leader we cannot identify.
+		return fmt.Errorf("cannot verify identity of process %d", e.PID)
 	}
 	// Leader missing is fine: the group may still hold stragglers. The kernel
 	// won't recycle a pgid while the group has members.

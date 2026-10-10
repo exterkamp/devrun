@@ -42,7 +42,7 @@ type Entry struct {
 	Kind           string         `json:"kind"`
 	PID            int            `json:"pid"`
 	PGID           int            `json:"pgid"`
-	PIDStart       uint64         `json:"pid_start"` // /proc start time of PID, guards against PID reuse
+	PIDStart       uint64         `json:"pid_start"` // platform process start time, guards against PID reuse
 	Cmd            []string       `json:"cmd"`
 	Ports          map[string]int `json:"ports"`
 	PrimaryPort    string         `json:"primary_port,omitempty"` // key into Ports used for URL
