@@ -269,3 +269,65 @@ fn owned_by_us(pid: i32) -> bool {
         Err(_) => false,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::registry::Entry;
+    use crate::rtime::Time;
+
+    fn dead_entry() -> Entry {
+        Entry {
+            key: "a:/w:web".into(),
+            project: "a".into(),
+            worktree: "/tmp".into(),
+            branch: String::new(),
+            name: "web".into(),
+            kind: "proc".into(),
+            pid: 999_999,
+            pgid: 999_999,
+            pid_start: 1,
+            cmd: vec![],
+            ports: [("PORT".to_string(), 41001)].into_iter().collect(),
+            primary_port: "PORT".into(),
+            compose_project: String::new(),
+            started_at: Time(0),
+            owner: None,
+            flagged: None,
+            log: String::new(),
+        }
+    }
+
+    #[test]
+    fn gc_empty_registry() {
+        let dir = std::env::temp_dir().join(format!("devrun-gc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (mut env, out, _e) = crate::cli::test_env(dir.clone(), "/tmp");
+        cmd_gc(&mut env, &["--json".to_string()]).unwrap();
+        let text = crate::cli::SharedBuf::text(&out);
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["removed"], serde_json::json!([]));
+        assert_eq!(v["orphans_killed"], 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn gc_drops_dead_entries() {
+        let dir = std::env::temp_dir().join(format!("devrun-gc2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (mut env, out, _e) = crate::cli::test_env(dir.clone(), "/tmp");
+        env.store
+            .update(|f| {
+                f.upsert(dead_entry());
+                Ok(())
+            })
+            .unwrap();
+        cmd_gc(&mut env, &["--json".to_string()]).unwrap();
+        let text = crate::cli::SharedBuf::text(&out);
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["removed"], serde_json::json!(["a:/w:web"]));
+        let f = env.store.load().unwrap();
+        assert!(f.entries.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

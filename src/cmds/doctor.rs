@@ -205,3 +205,41 @@ pub fn run_doctor(env: &mut Env) -> Vec<Check> {
     }
     cs
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn find<'a>(cs: &'a [Check], name: &str) -> &'a Check {
+        cs.iter().find(|c| c.name == name).unwrap()
+    }
+
+    #[test]
+    fn doctor_on_empty_state() {
+        let dir = std::env::temp_dir().join(format!("devrun-doctor-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (mut env, _o, _e) = crate::cli::test_env(dir.clone(), "/tmp");
+        let cs = run_doctor(&mut env);
+        assert_eq!(find(&cs, "state-dir").level, LEVEL_OK);
+        assert_eq!(find(&cs, "listeners").level, LEVEL_OK);
+        assert_eq!(find(&cs, "git").level, LEVEL_OK);
+        assert_eq!(find(&cs, "port-range").level, LEVEL_OK);
+        // herdr-pane is ok or warn depending on the test environment, but
+        // never a hard failure in a plain checkout.
+        assert_ne!(find(&cs, "herdr-pane").level, LEVEL_FAIL);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn doctor_json_shape() {
+        let dir = std::env::temp_dir().join(format!("devrun-doctor2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (mut env, out, _e) = crate::cli::test_env(dir.clone(), "/tmp");
+        cmd_doctor(&mut env, &["--json".to_string()]).unwrap();
+        let text = crate::cli::SharedBuf::text(&out);
+        let parsed: Vec<Check> = serde_json::from_str(&text).unwrap();
+        assert!(!parsed.is_empty());
+        assert!(parsed.iter().all(|c| !c.name.is_empty() && !c.level.is_empty()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
