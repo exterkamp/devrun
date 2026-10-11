@@ -12,6 +12,7 @@ pub const HOOK_SCRIPT: &str = "#!/bin/sh\n# devrun-managed hook\n# Installed by 
 pub const WRAPPER_SCRIPT: &str = "# Remove a worktree and stop its devrun servers first.\n# Usage: gwt-rm <worktree-path> [git worktree remove options]\ngwt-rm() {\n  local wt\n  wt=$(cd \"$1\" 2>/dev/null && pwd -P) || { echo \"gwt-rm: no such directory: $1\" >&2; return 1; }\n  devrun stop --worktree \"$wt\" --yes && git worktree remove \"$@\"\n}\n";
 
 pub fn cmd_hook(env: &mut Env, args: &[String]) -> CmdResult {
+    eprintln!("[DEBUG] entering");
     if args.is_empty() {
         return Err(CmdError::msg(
             "usage: devrun hook install [--force] | devrun hook wrapper",

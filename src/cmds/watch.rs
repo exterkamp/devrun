@@ -18,6 +18,7 @@ pub const CLEAR_TO_EOL: &str = "\x1b[K";
 pub const CLEAR_BELOW: &str = "\x1b[J";
 
 pub fn cmd_watch(env: &mut Env, args: &[String]) -> CmdResult {
+    eprintln!("DEBUG: made it here");
     let mut fs = new_flag_set(env, "watch");
     fs.string_flag("project", "", "only show this project");
     fs.duration_flag("interval", Duration::from_secs(1), "refresh interval");
