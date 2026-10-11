@@ -259,6 +259,14 @@ mod tests {
         assert!(!ports.contains(&8080), "state 01 is not LISTEN");
     }
 
+    static BUSY_PORT: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+    fn busy_source() -> Result<HashSet<i32>, String> {
+        Ok([BUSY_PORT.load(std::sync::atomic::Ordering::SeqCst)]
+            .into_iter()
+            .collect())
+    }
+
     fn bare_allocator() -> Allocator {
         Allocator {
             min: MIN_PORT,
@@ -344,10 +352,11 @@ mod tests {
         let names = vec!["PORT".to_string()];
         let want = a.allocate(&mut f, "k:/w:web", &names).unwrap()["PORT"];
         // Now pretend that port is listening on the host for someone else.
+        BUSY_PORT.store(want, std::sync::atomic::Ordering::SeqCst);
         let a2 = Allocator {
             min: MIN_PORT,
             max: MAX_PORT,
-            sources: vec![move || Ok([want].into_iter().collect())],
+            sources: vec![busy_source],
             available: None,
         };
         let mut f2 = RegistryFile::default();
