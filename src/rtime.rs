@@ -231,3 +231,73 @@ pub fn human_age(d: Duration) -> String {
         format!("{}d", secs / 86400)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn duration_round_trips() {
+        for (s, want) in [
+            ("60s", Duration::from_secs(60)),
+            ("100ms", Duration::from_millis(100)),
+            ("1m30s", Duration::from_secs(90)),
+            ("2h", Duration::from_secs(7200)),
+            ("1h30m", Duration::from_secs(5400)),
+            ("250us", Duration::from_micros(250)),
+            ("0", Duration::ZERO),
+        ] {
+            assert_eq!(parse_duration(s).unwrap(), want, "{s}");
+        }
+        assert!(parse_duration("").is_err());
+        assert!(parse_duration("10").is_err());
+        assert!(parse_duration("10x").is_err());
+        assert!(parse_duration("s").is_err());
+    }
+
+    #[test]
+    fn duration_formats() {
+        assert_eq!(format_duration(Duration::from_secs(60)), "1m0s");
+        assert_eq!(format_duration(Duration::from_millis(500)), "500ms");
+        assert_eq!(format_duration(Duration::from_secs(90)), "1m30s");
+        assert_eq!(format_duration(Duration::ZERO), "0s");
+    }
+
+    #[test]
+    fn time_rfc3339_round_trip() {
+        let t = Time::from_unix(1_789_000_000, 123_456_789);
+        let s = t.to_string();
+        assert!(s.starts_with("20"), "{s}");
+        assert!(s.ends_with('Z'), "{s}");
+        assert_eq!(Time::parse(&s).unwrap(), t);
+        // Go writes whole seconds without a fraction.
+        let whole = Time::from_unix(1_789_000_000, 0);
+        assert!(!whole.to_string().contains('.'));
+        assert_eq!(Time::parse(&whole.to_string()).unwrap(), whole);
+    }
+
+    #[test]
+    fn time_parse_offsets() {
+        let a = Time::parse("2026-01-02T03:04:05Z").unwrap();
+        let b = Time::parse("2026-01-02T05:04:05+02:00").unwrap();
+        assert_eq!(a, b);
+        let c = Time::parse("2026-01-02T00:04:05-03:00").unwrap();
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn ages() {
+        assert_eq!(human_age(Duration::from_secs(5)), "5s");
+        assert_eq!(human_age(Duration::from_secs(300)), "5m");
+        assert_eq!(human_age(Duration::from_secs(7200)), "2h");
+        assert_eq!(human_age(Duration::from_secs(3 * 86400)), "3d");
+    }
+
+    #[test]
+    fn sub_clamps() {
+        let a = Time::from_unix(100, 0);
+        let b = Time::from_unix(50, 0);
+        assert_eq!(a.sub(b), Duration::from_secs(50));
+        assert_eq!(b.sub(a), Duration::ZERO);
+    }
+}
