@@ -305,3 +305,121 @@ fn tempfile_in(dir: &std::path::Path) -> Result<(FsFile, PathBuf), String> {
     }
     Err("cannot create temp registry file".into())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(key_s: &str, ports: &[(&str, i32)]) -> Entry {
+        let (project, rest) = key_s.split_once(':').unwrap();
+        let (wt, name) = rest.rsplit_once(':').unwrap();
+        Entry {
+            key: key_s.into(),
+            project: project.into(),
+            worktree: wt.into(),
+            branch: "main".into(),
+            name: name.into(),
+            kind: "proc".into(),
+            pid: 0,
+            pgid: 0,
+            pid_start: 0,
+            cmd: vec![],
+            ports: ports.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
+            primary_port: String::new(),
+            compose_project: String::new(),
+            started_at: Time(0),
+            owner: None,
+            flagged: None,
+            log: String::new(),
+        }
+    }
+
+    #[test]
+    fn key_format() {
+        assert_eq!(key("app", "/w/app", "web"), "app:/w/app:web");
+    }
+
+    #[test]
+    fn port_priority() {
+        let mut e = entry("a:/w:web", &[("API", 41001), ("PORT", 41002), ("WEB", 41003)]);
+        assert_eq!(e.port(), 41002, "PORT beats alphabetical");
+        e.primary_port = "WEB".into();
+        assert_eq!(e.port(), 41003, "primary beats PORT");
+        e.primary_port = "MISSING".into();
+        assert_eq!(e.port(), 41002, "missing primary falls back to PORT");
+        let e2 = entry("a:/w:web", &[("ZZZ", 41009), ("API", 41001)]);
+        assert_eq!(e2.port(), 41001, "alphabetically first name");
+        let e3 = entry("a:/w:web", &[]);
+        assert_eq!(e3.port(), 0);
+        assert_eq!(e3.url(), "");
+        assert_eq!(e.url(), "http://127.0.0.1:41002");
+    }
+
+    #[test]
+    fn file_ops() {
+        let mut f = RegistryFile::default();
+        f.upsert(entry("a:/w:web", &[("PORT", 41001)]));
+        f.upsert(entry("a:/w:api", &[("PORT", 41002)]));
+        f.upsert(entry("a:/w:web", &[("PORT", 41003)]));
+        assert_eq!(f.entries.len(), 2, "upsert replaces by key");
+        assert_eq!(f.find("a:/w:web").unwrap().port(), 41003);
+        assert!(f.find("nope").is_none());
+        let used = f.ports_in_use("a:/w:web");
+        assert!(used.contains(&41002) && !used.contains(&41003));
+        assert!(f.remove("a:/w:web"));
+        assert!(!f.remove("a:/w:web"));
+    }
+
+    #[test]
+    fn json_shape_matches_go() {
+        let mut e = entry("a:/w:web", &[("PORT", 41001)]);
+        e.started_at = Time::from_unix(1_789_000_000, 0);
+        e.owner = Some(Owner {
+            herdr_pane: "p1".into(),
+            ..Default::default()
+        });
+        let s = serde_json::to_string(&e).unwrap();
+        assert!(s.contains("\"pid_start\":0"), "{s}");
+        assert!(s.contains("\"primary_port\"") == false, "empty primary omitted: {s}");
+        assert!(s.contains("\"herdr_pane\":\"p1\""), "{s}");
+        assert!(!s.contains("herdr_workspace"), "empty owner fields omitted: {s}");
+        let back: Entry = serde_json::from_str(&s).unwrap();
+        assert_eq!(back, e);
+    }
+
+    #[test]
+    fn store_round_trip_and_lock() {
+        let dir = std::env::temp_dir().join(format!("devrun-reg-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store { dir: dir.clone() };
+        let f = store.load().unwrap();
+        assert_eq!(f.version, FILE_VERSION);
+        assert!(f.entries.is_empty());
+        store
+            .update(|f| {
+                f.upsert(entry("a:/w:web", &[("PORT", 41001)]));
+                f.reserved.insert("a:/w:web#PORT".into(), 41001);
+                Ok(())
+            })
+            .unwrap();
+        let f = store.load().unwrap();
+        assert_eq!(f.entries.len(), 1);
+        assert_eq!(f.reserved.get("a:/w:web#PORT"), Some(&41001));
+        // The on-disk file is valid JSON with the Go field names.
+        let raw = std::fs::read_to_string(store.path()).unwrap();
+        assert!(raw.contains("\"reserved\""), "{raw}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn corrupt_registry_is_an_error() {
+        let dir = std::env::temp_dir().join(format!("devrun-reg-bad-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("registry.json"), "{not json").unwrap();
+        let store = Store { dir: dir.clone() };
+        let err = store.load().unwrap_err();
+        assert!(err.contains("corrupt"), "{err}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
