@@ -305,3 +305,114 @@ impl FlagSet {
         out
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn noop(_: &str) {}
+
+    #[test]
+    fn parse_all_kinds() {
+        let mut fs = FlagSet::new("devrun x");
+        fs.bool_flag("json", false, "");
+        fs.string_flag("name", "web", "");
+        fs.int_flag("n", 100, "");
+        fs.duration_flag("wait", Duration::from_secs(60), "");
+        let args: Vec<String> = ["--json", "-name", "api", "-n=5", "--wait", "1m30s"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        fs.parse(&args, &mut noop).unwrap();
+        assert!(fs.get_bool("json"));
+        assert_eq!(fs.get_string("name"), "api");
+        assert_eq!(fs.get_int("n"), 5);
+        assert_eq!(fs.get_duration("wait"), Duration::from_secs(90));
+        assert!(fs.args.is_empty());
+    }
+
+    #[test]
+    fn parse_stops_at_positional() {
+        let mut fs = FlagSet::new("devrun x");
+        fs.bool_flag("f", false, "");
+        let args: Vec<String> = ["web", "-f"].iter().map(|s| s.to_string()).collect();
+        fs.parse(&args, &mut noop).unwrap();
+        assert!(!fs.get_bool("f"), "Go flag stops at the first non-flag");
+        assert_eq!(fs.args, vec!["web", "-f"]);
+    }
+
+    #[test]
+    fn interspersed_collects_positionals() {
+        let mut fs = FlagSet::new("devrun x");
+        fs.bool_flag("f", false, "");
+        fs.int_flag("n", 100, "");
+        let args: Vec<String> = ["web", "-f", "-n", "3", "extra"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let pos = fs.parse_interspersed(&args, &mut noop).unwrap();
+        assert_eq!(pos, vec!["web", "extra"]);
+        assert!(fs.get_bool("f"));
+        assert_eq!(fs.get_int("n"), 3);
+    }
+
+    #[test]
+    fn unknown_and_missing_value() {
+        let mut fs = FlagSet::new("devrun x");
+        fs.bool_flag("f", false, "");
+        let args: Vec<String> = ["-nope"].iter().map(|s| s.to_string()).collect();
+        assert!(fs.parse(&args, &mut noop).unwrap_err().contains("not defined"));
+        let mut fs2 = FlagSet::new("devrun x");
+        fs2.string_flag("name", "", "");
+        let args2: Vec<String> = ["-name"].iter().map(|s| s.to_string()).collect();
+        assert!(fs2.parse(&args2, &mut noop).unwrap_err().contains("needs an argument"));
+    }
+
+    #[test]
+    fn help_is_a_distinguished_error() {
+        let mut fs = FlagSet::new("devrun x");
+        fs.bool_flag("f", false, "a flag");
+        let mut printed = String::new();
+        let args: Vec<String> = ["-h"].iter().map(|s| s.to_string()).collect();
+        let err = fs
+            .parse(&args, &mut |s| printed.push_str(s))
+            .unwrap_err();
+        assert_eq!(err, ERR_HELP);
+        assert!(printed.contains("-f"), "{printed}");
+    }
+
+    #[test]
+    fn double_dash_ends_flags() {
+        let mut fs = FlagSet::new("devrun x");
+        fs.bool_flag("f", false, "");
+        let args: Vec<String> = ["--", "-f"].iter().map(|s| s.to_string()).collect();
+        fs.parse(&args, &mut noop).unwrap();
+        assert_eq!(fs.args, vec!["-f"]);
+        assert!(!fs.get_bool("f"));
+    }
+
+    #[test]
+    fn multi_accumulates() {
+        let mut fs = FlagSet::new("devrun x");
+        fs.multi_flag("f", "");
+        let args: Vec<String> = ["-f", "a.yml", "--f=b.yml"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        fs.parse(&args, &mut noop).unwrap();
+        assert_eq!(fs.get_multi("f"), vec!["a.yml", "b.yml"]);
+    }
+
+    #[test]
+    fn bool_with_explicit_value() {
+        let mut fs = FlagSet::new("devrun x");
+        fs.bool_flag("all", false, "");
+        let args: Vec<String> = ["--all=false"].iter().map(|s| s.to_string()).collect();
+        fs.parse(&args, &mut noop).unwrap();
+        assert!(!fs.get_bool("all"));
+        let mut fs2 = FlagSet::new("devrun x");
+        fs2.bool_flag("all", false, "");
+        let args2: Vec<String> = ["--all=maybe"].iter().map(|s| s.to_string()).collect();
+        assert!(fs2.parse(&args2, &mut noop).is_err());
+    }
+}
