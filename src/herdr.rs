@@ -268,3 +268,55 @@ pub fn version() -> Result<String, String> {
         Err(format!("herdr --version: {}", out.status))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_cases() {
+        assert_eq!(truncate("short", 10), "short");
+        assert_eq!(truncate("123456", 3), "12…");
+        assert_eq!(truncate("ab", 1), "a");
+        assert_eq!(truncate("héllo wörld", 5), "héll…");
+        assert_eq!(truncate("", 3), "");
+    }
+
+    #[test]
+    fn agent_for_picks_the_pane() {
+        let raw = serde_json::json!({
+            "agents": [
+                {"agent": "codex", "name": "", "pane_id": "p1"},
+                {"agent": "claude", "name": "claude-2", "pane_id": "p2"},
+                {"agent": "claude", "name": "", "pane_id": "p3"}
+            ]
+        });
+        assert_eq!(agent_for(&raw, "p1"), "codex", "falls back to kind");
+        assert_eq!(agent_for(&raw, "p2"), "claude-2", "name wins");
+        assert_eq!(agent_for(&raw, "nope"), "");
+        assert_eq!(agent_for(&serde_json::json!({}), "p1"), "");
+    }
+
+    #[test]
+    fn in_pane_needs_env_and_pane_id() {
+        // The test process is not a herdr pane; just assert no panic and the
+        // function agrees with the raw environment.
+        let expect = std::env::var("HERDR_ENV").map(|v| v == "1").unwrap_or(false)
+            && !std::env::var("HERDR_PANE_ID").unwrap_or_default().is_empty();
+        assert_eq!(in_pane(), expect);
+    }
+
+    #[test]
+    fn server_not_running_detection() {
+        assert!(server_not_running("herdr: server_not_running: no server"));
+        assert!(!server_not_running("herdr: other: x"));
+    }
+
+    #[test]
+    fn run_without_herdr_errors_cleanly() {
+        if binary().is_none() {
+            let err = run(Duration::from_millis(100), &["api", "snapshot"]).unwrap_err();
+            assert!(err.contains("herdr not found"), "{err}");
+        }
+    }
+}
