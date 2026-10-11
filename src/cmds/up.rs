@@ -383,3 +383,97 @@ pub fn has_container_name(path: &str) -> bool {
             }),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn env() -> Env {
+        let dir = std::env::temp_dir().join(format!("devrun-up-{}", std::process::id()));
+        let (e, _o, _err) = crate::cli::test_env(dir, "/tmp");
+        e
+    }
+
+    #[test]
+    fn compose_plan_default_port() {
+        let dir = std::env::temp_dir().join(format!("devrun-compose-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("compose.yml"), "services:\n  web:\n    image: x\n").unwrap();
+        let mut e = env();
+        let plan = build_compose_plan("", &[], &[dir.join("compose.yml").to_string_lossy().into_owned()], false, &[], &mut e).unwrap();
+        assert_eq!(plan.port_names, vec!["PORT"]);
+        assert_eq!(plan.primary, "PORT");
+        assert_eq!(plan.kind, docker::KIND);
+        assert!(plan.cmd.contains(&"up".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn compose_plan_named_ports_and_overrides() {
+        let dir = std::env::temp_dir().join(format!("devrun-compose2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("compose.yml"), "services: {}\n").unwrap();
+        let file = dir.join("compose.yml").to_string_lossy().into_owned();
+        let mut e = env();
+        let plan = build_compose_plan(
+            "web,api",
+            &["api=BACKEND_PORT".to_string()],
+            &[file.clone()],
+            true,
+            &["--profile".to_string(), "x".to_string()],
+            &mut e,
+        )
+        .unwrap();
+        assert_eq!(plan.port_names, vec!["WEB_PORT", "BACKEND_PORT"]);
+        assert_eq!(plan.primary, "WEB_PORT");
+        assert!(plan.cmd.contains(&"--build".to_string()));
+        assert!(plan.cmd.contains(&"--profile".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn compose_plan_rejects_bad_input() {
+        let mut e = env();
+        let file = "/tmp/whatever-compose.yml".to_string();
+        std::fs::write(&file, "services: {}\n").unwrap();
+        // --port-var without --ports
+        assert!(build_compose_plan("", &["web=X".into()], &[file.clone()], false, &[], &mut e).is_err());
+        // --port-var naming something not in --ports
+        assert!(build_compose_plan("web", &["api=X".into()], &[file.clone()], false, &[], &mut e).is_err());
+        // malformed --port-var
+        assert!(build_compose_plan("web", &["web".into()], &[file.clone()], false, &[], &mut e).is_err());
+        // empty name in --ports
+        assert!(build_compose_plan("web,,api", &[], &[file.clone()], false, &[], &mut e).is_err());
+        // duplicate resulting var
+        assert!(build_compose_plan("web,web", &[], &[file.clone()], false, &[], &mut e).is_err());
+        // missing compose file
+        assert!(build_compose_plan("", &[], &["/tmp/definitely-not-here-12345.yml".into()], false, &[], &mut e).is_err());
+        let _ = std::fs::remove_file(&file);
+    }
+
+    #[test]
+    fn container_name_detection() {
+        let dir = std::env::temp_dir().join(format!("devrun-cn-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("c.yml");
+        std::fs::write(&p, "services:\n  web:\n    container_name: fixed\n").unwrap();
+        assert!(has_container_name(p.to_str().unwrap()));
+        std::fs::write(&p, "services:\n  web:\n    image: x # container_name: nope\n").unwrap();
+        assert!(!has_container_name(p.to_str().unwrap()));
+        std::fs::write(&p, "# container_name: commented\nservices: {}\n").unwrap();
+        assert!(!has_container_name(p.to_str().unwrap()), "indented comment is not a key at line start after trim? {}", "");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn find_compose_file_walks_up() {
+        let dir = std::env::temp_dir().join(format!("devrun-find-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let sub = dir.join("a/b");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(dir.join("docker-compose.yaml"), "services: {}\n").unwrap();
+        let got = find_compose_file(sub.to_str().unwrap()).unwrap();
+        assert!(got.ends_with("docker-compose.yaml"), "{got}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
