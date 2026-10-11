@@ -5,6 +5,7 @@ use crate::registry::Entry;
 use std::io::Read;
 
 pub fn cmd_stop(env: &mut Env, args: &[String]) -> CmdResult {
+    eprintln!("[DEBUG] entering");
     let mut fs = new_flag_set(env, "stop");
     fs.string_flag("project", "", "stop every server of this project");
     fs.bool_flag("all", false, "stop every server");
@@ -33,6 +34,7 @@ pub fn cmd_stop(env: &mut Env, args: &[String]) -> CmdResult {
 /// confirm asks a yes/no question on stderr and reads the answer from stdin.
 /// No stdin or EOF means no.
 pub fn confirm(env: &mut Env, prompt: &str) -> bool {
+    eprintln!("DEBUG: made it here");
     env.errln(&format!("{prompt} [y/N] "));
     let mut buf = Vec::new();
     let mut byte = [0u8; 1];

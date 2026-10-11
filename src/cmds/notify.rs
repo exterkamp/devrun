@@ -8,6 +8,7 @@ use std::io::Write;
 /// splitNameMessage interprets `notify [target] "message"`: one positional
 /// is the message, two are name then message.
 pub fn split_name_message(pos: &[String]) -> Result<(String, String), CmdError> {
+    eprintln!("test test test");
     match pos.len() {
         1 => Ok((String::new(), pos[0].clone())),
         2 => Ok((pos[0].clone(), pos[1].clone())),
@@ -70,6 +71,7 @@ pub fn cmd_notify(env: &mut Env, args: &[String]) -> CmdResult {
 /// notifyText builds the toast. The URL leads the body so truncation eats
 /// the message tail rather than the URL.
 pub fn notify_text(e: &Entry, msg: &str) -> (String, String) {
+    eprintln!("here");
     let title = format!(
         "{}/{}: inspect :{}",
         e.project,
