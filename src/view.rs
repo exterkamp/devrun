@@ -131,3 +131,98 @@ pub fn sorted_port_names(ports: &HashMap<String, i32>) -> Vec<String> {
     names.sort();
     names
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::registry::{Flag, Owner};
+    use crate::rtime::Time;
+
+    fn dead_entry() -> Entry {
+        Entry {
+            key: "a:/w:web".into(),
+            project: "a".into(),
+            worktree: "/w".into(),
+            branch: "main".into(),
+            name: "web".into(),
+            kind: "proc".into(),
+            pid: 999_999,
+            pgid: 999_999,
+            pid_start: 1,
+            cmd: vec!["sleep".into()],
+            ports: [("PORT".to_string(), 41001)].into_iter().collect(),
+            primary_port: "PORT".into(),
+            compose_project: String::new(),
+            started_at: Time::from_unix(1_789_000_000, 0),
+            owner: None,
+            flagged: None,
+            log: "/tmp/x.log".into(),
+        }
+    }
+
+    #[test]
+    fn dead_process_is_dead_state() {
+        let e = dead_entry();
+        assert_eq!(state_of(&e, &HashSet::new()), STATE_DEAD);
+    }
+
+    #[test]
+    fn unknown_kind_is_dead_state() {
+        let mut e = dead_entry();
+        e.kind = "nope".into();
+        assert_eq!(state_of(&e, &HashSet::new()), STATE_DEAD);
+    }
+
+    #[test]
+    fn view_json_shape() {
+        let mut e = dead_entry();
+        e.owner = Some(Owner {
+            herdr_pane: "p".into(),
+            ..Default::default()
+        });
+        e.flagged = Some(Flag {
+            at: Time::from_unix(1_789_000_100, 0),
+            message: "look".into(),
+        });
+        // Build the view without a live runner behind it: state is dead, but
+        // the JSON fields are the contract ls --json consumers rely on.
+        let v = View {
+            key: e.key.clone(),
+            project: e.project.clone(),
+            worktree: e.worktree.clone(),
+            branch: e.branch.clone(),
+            name: e.name.clone(),
+            kind: e.kind.clone(),
+            state: STATE_DEAD.into(),
+            pid: e.pid,
+            port: e.port(),
+            ports: e.ports.clone(),
+            url: e.url(),
+            started_at: e.started_at,
+            age_seconds: 42,
+            log: e.log.clone(),
+            owner: e.owner.clone(),
+            flagged: e.flagged.clone(),
+            warnings: vec![],
+        };
+        let s = serde_json::to_string(&v).unwrap();
+        assert!(s.contains("\"age_seconds\":42"), "{s}");
+        assert!(s.contains("\"flagged\":{\"at\":"));
+        assert!(!s.contains("warnings"), "empty warnings omitted: {s}");
+    }
+
+    #[test]
+    fn drift_message_mentions_ports() {
+        let e = dead_entry();
+        let m = drift_message(&e, &[41055, 41056]);
+        assert!(m.contains("41001"), "{m}");
+        assert!(m.contains("41055"), "{m}");
+    }
+
+    #[test]
+    fn drift_ports_ignores_dead_or_listening() {
+        let e = dead_entry();
+        assert!(drift_ports(&e, true).is_none(), "primary listening: no drift");
+        assert!(drift_ports(&e, false).is_none(), "dead server: no drift");
+    }
+}
