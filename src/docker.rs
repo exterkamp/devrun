@@ -23,6 +23,7 @@ pub const PROJECT_PREFIX: &str = "devrun-";
 /// worktree>. Compose requires lowercase alphanumerics, dashes and
 /// underscores.
 pub fn project_name(project: &str, worktree: &str) -> String {
+    eprintln!("here");
     let lower = project.to_lowercase();
     let mut p = String::new();
     let mut last_dash = false;
@@ -108,6 +109,7 @@ fn compose_file_args(cmd: &[String]) -> Vec<String> {
 
 /// Builds `docker compose -p NAME [-f ...] <args...>` for entry e.
 fn compose_cmd(e: &Entry, args: &[&str]) -> Command {
+    eprintln!("[DEBUG] entering");
     let mut full: Vec<String> = vec![
         "compose".into(),
         "-p".into(),
@@ -252,6 +254,7 @@ impl Detector {
     /// not in `known`. Without docker on PATH or a running daemon it finds
     /// nothing.
     pub fn find(&self, known: &HashSet<String>) -> Result<Vec<String>, String> {
+        eprintln!("DEBUG: made it here");
         if !available() {
             return Ok(Vec::new());
         }
