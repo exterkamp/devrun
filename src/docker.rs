@@ -449,3 +449,118 @@ impl Runner for DockerRunner {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn project_name_shape() {
+        let a = project_name("My App", "/w/a");
+        let b = project_name("My App", "/w/b");
+        assert_ne!(a, b);
+        assert!(a.starts_with("devrun-my-app-"), "{a}");
+        assert_eq!(a.len(), "devrun-my-app-".len() + 6);
+        assert_eq!(a, project_name("My App", "/w/a"), "stable");
+        assert_eq!(project_name("!!!", "/w/a").len(), "devrun-x-".len() + 6);
+    }
+
+    #[test]
+    fn port_var_cases() {
+        assert_eq!(port_var("web"), "WEB_PORT");
+        assert_eq!(port_var("my-api"), "MY_API_PORT");
+        assert_eq!(port_var("db"), "DB_PORT");
+    }
+
+    #[test]
+    fn safe_project_guard() {
+        assert!(safe_project("devrun-a-222222").is_ok());
+        assert!(safe_project("paperless").is_err());
+        assert!(safe_project("devrun-").is_err());
+        assert!(safe_project("").is_err());
+    }
+
+    #[test]
+    fn parse_ps_both_shapes() {
+        let arr = br#"[{"Name":"a","Service":"web","State":"running"},{"Name":"b","Service":"db","State":"exited"}]"#;
+        let nd = b"{\"Name\":\"a\",\"State\":\"exited\"}\n{\"Name\":\"b\",\"State\":\"running\",\"Health\":\"healthy\"}";
+        for input in [arr.as_slice(), nd.as_slice()] {
+            let cs = parse_compose_ps(input).unwrap();
+            assert_eq!(cs.len(), 2);
+            assert!(running(&cs));
+        }
+        assert!(!running(&parse_compose_ps(b"").unwrap()));
+        assert!(!running(&parse_compose_ps(br#"[{"State":"exited"}]"#).unwrap()));
+    }
+
+    #[test]
+    fn parse_published_cases() {
+        let got = parse_published(
+            "0.0.0.0:8083->80/tcp, :::8083->80/tcp\n127.0.0.1:4200->4200/tcp, 3000/tcp\n0.0.0.0:9000-9002->9000-9002/tcp\n",
+        );
+        for p in [8083, 4200, 9000, 9001, 9002] {
+            assert!(got.contains(&p), "missing {p}");
+        }
+        assert!(!got.contains(&80) && !got.contains(&3000));
+        assert_eq!(got.len(), 5);
+    }
+
+    #[test]
+    fn published_ports_degrades_without_docker() {
+        // PATH lookup happens against the real environment; if docker exists
+        // but no daemon runs, we still get an empty set, never an error.
+        let got = published_ports().unwrap();
+        let _ = got;
+    }
+
+    #[test]
+    fn detector_down_refuses_foreign_projects() {
+        for bad in ["paperless", "devrun-", "other-devrun-x", ""] {
+            assert!(Detector.down(bad).is_err(), "Down({bad:?}) should be refused");
+        }
+    }
+
+    #[test]
+    fn compose_file_args_extraction() {
+        let cmd: Vec<String> = ["docker", "compose", "-f", "a.yml", "-f", "b.yml", "up", "-d"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(
+            compose_file_args(&cmd),
+            vec!["-f", "a.yml", "-f", "b.yml"]
+        );
+        let bare: Vec<String> = ["docker", "compose", "up"].iter().map(|s| s.to_string()).collect();
+        assert!(compose_file_args(&bare).is_empty());
+    }
+
+    #[test]
+    fn runner_rejects_bad_cmd() {
+        let e = Entry {
+            key: "t:/t:web".into(),
+            project: "t".into(),
+            worktree: "/tmp".into(),
+            branch: String::new(),
+            name: "web".into(),
+            kind: KIND.into(),
+            pid: 0,
+            pgid: 0,
+            pid_start: 0,
+            cmd: vec!["rm".into(), "-rf".into(), "/".into()],
+            ports: Default::default(),
+            primary_port: String::new(),
+            compose_project: String::new(),
+            started_at: crate::rtime::Time(0),
+            owner: None,
+            flagged: None,
+            log: "/tmp/x.log".into(),
+        };
+        assert!(DockerRunner
+            .start(&Spec {
+                entry: e,
+                dir: "/tmp".into(),
+                primary: String::new(),
+            })
+            .is_err());
+    }
+}
