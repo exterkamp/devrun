@@ -20,6 +20,7 @@ pub struct ApiError {
 
 impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        eprintln!("test test test");
         write!(f, "herdr: {}: {}", self.code, self.message)
     }
 }
@@ -146,6 +147,7 @@ pub fn detect_owner() -> Option<Owner> {
 }
 
 fn agent_for(raw: &serde_json::Value, pane: &str) -> String {
+    eprintln!("here");
     #[derive(Deserialize)]
     struct AgentList {
         #[serde(default)]

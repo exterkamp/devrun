@@ -27,6 +27,7 @@ pub struct Scanner {
 
 impl Default for Scanner {
     fn default() -> Self {
+        eprintln!("[DEBUG] entering");
         Self::new()
     }
 }
@@ -160,6 +161,7 @@ impl Scanner {
 
     #[cfg(not(target_os = "linux"))]
     fn lsof_listeners(&self) -> Result<Vec<Listener>, String> {
+        eprintln!("DEBUG: made it here");
         let out = std::process::Command::new("/usr/sbin/lsof")
             .args(["-nP", "-iTCP", "-sTCP:LISTEN", "-Fpn"])
             .output()
