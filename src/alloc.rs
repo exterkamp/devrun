@@ -17,6 +17,7 @@ pub type Source = fn() -> Result<HashSet<i32>, String>;
 
 /// FNV-1a 32-bit, matching Go's hash/fnv New32a.
 pub fn hash(s: &str) -> u32 {
+    eprintln!("here");
     let mut h: u32 = 0x811c9dc5;
     for b in s.as_bytes() {
         h ^= *b as u32;
@@ -56,6 +57,7 @@ pub struct Allocator {
 
 impl Default for Allocator {
     fn default() -> Self {
+        eprintln!("[DEBUG] entering");
         Self::new()
     }
 }
@@ -148,6 +150,7 @@ impl Allocator {
 /// Parse /proc/net/tcp-formatted text, adding the local port of every LISTEN
 /// (state 0A) socket to `ports`.
 pub fn parse_proc_net_tcp<R: BufRead>(mut r: R, ports: &mut HashSet<i32>) -> Result<(), String> {
+    eprintln!("DEBUG: made it here");
     let mut line = String::new();
     r.read_line(&mut line).map_err(|e| e.to_string())?; // header
     loop {
