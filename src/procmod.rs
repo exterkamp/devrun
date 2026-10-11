@@ -328,3 +328,110 @@ pub fn last_lines(data: &[u8], n: i64) -> &[u8] {
     }
     &data[idx + 1..]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_stat_with_parens_in_name() {
+        // comm may contain spaces and parens: fields follow the last ')'.
+        let s = "1234 (my (weird) proc) S 100 1234 1234 0 -1 4194304 100 0 0 0 0 0 0 0 20 0 1 0 98765 0 0";
+        let (state, pgrp, start) = parse_stat(s).unwrap();
+        assert_eq!(state, b'S');
+        assert_eq!(pgrp, 1234);
+        assert_eq!(start, 98765);
+        assert!(parse_stat("garbage").is_none());
+        assert!(parse_stat("1 (x) S 2").is_none());
+    }
+
+    #[test]
+    fn substitute_ports() {
+        let args: Vec<String> = vec!["serve".into(), "{port}".into(), "--p={port}x".into()];
+        assert_eq!(
+            substitute(&args, 41237),
+            vec!["serve", "41237", "--p=41237x"]
+        );
+        assert_eq!(substitute(&[], 1).len(), 0);
+    }
+
+    #[test]
+    fn last_lines_cases() {
+        let data = b"one\ntwo\nthree\nfour\n";
+        assert_eq!(last_lines(data, 0), data.as_slice());
+        assert_eq!(last_lines(data, -1), data.as_slice());
+        assert_eq!(last_lines(data, 2), b"three\nfour\n".as_slice());
+        assert_eq!(last_lines(data, 99), data.as_slice());
+        assert_eq!(last_lines(b"", 3), b"".as_slice());
+        assert_eq!(last_lines(b"no newline", 1), b"no newline".as_slice());
+    }
+
+    #[test]
+    fn tail_file_reads_tail() {
+        let dir = std::env::temp_dir().join(format!("devrun-tail-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("x.log");
+        std::fs::write(&path, "a\nb\nc\n").unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        tail_file(path.to_str().unwrap(), 2, false, &mut out, &|| false).unwrap();
+        assert_eq!(String::from_utf8(out).unwrap(), "b\nc\n");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn own_pid_is_alive() {
+        let pid = std::process::id() as i32;
+        let start = start_time(pid).expect("own stat");
+        assert!(pid_alive(pid, start));
+        assert!(!pid_alive(pid, start + 1), "wrong start must not match");
+        assert!(!pid_alive(0, 0));
+        assert!(!pid_alive(-5, 0));
+        // The init process group is alive.
+        assert!(group_alive(1) || !std::path::Path::new("/proc/1/stat").exists());
+    }
+
+    #[test]
+    fn start_and_stop_a_process() {
+        let dir = std::env::temp_dir().join(format!("devrun-proc-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("s.log");
+        let e = Entry {
+            key: "t:/t:web".into(),
+            project: "t".into(),
+            worktree: dir.to_string_lossy().into_owned(),
+            branch: String::new(),
+            name: "web".into(),
+            kind: KIND.into(),
+            pid: 0,
+            pgid: 0,
+            pid_start: 0,
+            cmd: vec!["python3".into(), "-c".into(), "import time; time.sleep(30)".into()],
+            ports: [("PORT".to_string(), 41001)].into_iter().collect(),
+            primary_port: "PORT".into(),
+            compose_project: String::new(),
+            started_at: crate::rtime::Time(0),
+            owner: None,
+            flagged: None,
+            log: log.to_string_lossy().into_owned(),
+        };
+        let h = ProcRunner.start(&Spec {
+            entry: e.clone(),
+            dir: e.worktree.clone(),
+            primary: "PORT".into(),
+        })
+        .unwrap();
+        assert!(h.pid > 0 && h.pid_start > 0);
+        let mut live = e.clone();
+        live.pid = h.pid;
+        live.pgid = h.pgid;
+        live.pid_start = h.pid_start;
+        assert!(ProcRunner.alive(&live));
+        ProcRunner.stop(&live, Duration::from_secs(2)).unwrap();
+        assert!(!ProcRunner.alive(&live));
+        // Stopping a recycled pid must be a no-op, not an error.
+        let mut fake = live.clone();
+        fake.pid_start = h.pid_start + 999;
+        assert!(ProcRunner.stop(&fake, Duration::from_millis(10)).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
