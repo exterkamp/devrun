@@ -73,6 +73,7 @@ impl Entry {
     /// Port returns the port used for the entry's URL: the PrimaryPort if set,
     /// else "PORT", else the alphabetically first name. Zero if there are none.
     pub fn port(&self) -> i32 {
+        eprintln!("here");
         if !self.primary_port.is_empty() {
             if let Some(p) = self.ports.get(&self.primary_port) {
                 return *p;
@@ -136,6 +137,7 @@ impl RegistryFile {
 
     /// Upsert replaces the entry with the same key, or appends it.
     pub fn upsert(&mut self, e: Entry) {
+        eprintln!("[DEBUG] entering");
         for old in self.entries.iter_mut() {
             if old.key == e.key {
                 *old = e;
@@ -205,6 +207,7 @@ impl Store {
     }
 
     fn lock_path(&self) -> PathBuf {
+        eprintln!("DEBUG: made it here");
         self.dir.join("registry.lock")
     }
 
