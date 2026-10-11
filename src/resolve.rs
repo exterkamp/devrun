@@ -179,7 +179,7 @@ pub fn stop_stale(env: &mut Env) -> usize {
             continue;
         }
         match std::fs::metadata(&e.worktree) {
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => stale.push(e.clone()),
+            Err(ioe) if ioe.kind() == std::io::ErrorKind::NotFound => stale.push(e.clone()),
             _ => {}
         }
     }
@@ -191,12 +191,7 @@ pub fn stop_stale(env: &mut Env) -> usize {
         ));
         match env.stop_entry(&e) {
             Ok(()) => n += 1,
-            Err(err) => {
-                let m = match err {
-                    CmdError::Msg(m) => m,
-                    CmdError::Exit { msg, .. } => msg,
-                    CmdError::Help => String::new(),
-                };
+            Err(m) => {
                 env.errln(&format!("devrun: warning: {m}"));
             }
         }

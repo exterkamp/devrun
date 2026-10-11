@@ -64,7 +64,7 @@ impl fmt::Display for Time {
         let nanos = self.0.rem_euclid(1_000_000_000) as u32;
         let days = secs.div_euclid(86400);
         let tod = secs.rem_euclid(86400);
-        let (y, mo, d) = civil_from_days(days);
+        let (y, mo, d) = civil_from_days(days as i64);
         let (h, mi, s) = (tod / 3600, (tod % 3600) / 60, tod % 60);
         if nanos == 0 {
             write!(f, "{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z")

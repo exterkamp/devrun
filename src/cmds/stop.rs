@@ -26,7 +26,8 @@ pub fn cmd_stop(env: &mut Env, args: &[String]) -> CmdResult {
     let name = pos.first().cloned().unwrap_or_default();
     let f = env.store.load()?;
     let e = env.resolve_entry(&f, "stop", &name)?;
-    env.stop_entry(&e)
+    env.stop_entry(&e)?;
+    Ok(())
 }
 
 /// confirm asks a yes/no question on stderr and reads the answer from stdin.
@@ -86,11 +87,7 @@ pub fn stop_scoped(
     let mut errs: Vec<String> = Vec::new();
     for e in &targets {
         if let Err(err) = env.stop_entry(e) {
-            errs.push(match err {
-                CmdError::Msg(m) => m,
-                CmdError::Exit { msg, .. } => msg,
-                CmdError::Help => String::new(),
-            });
+            errs.push(err);
         }
     }
     if !errs.is_empty() {

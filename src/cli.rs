@@ -261,8 +261,8 @@ pub fn install_signal_handlers() {
         INTERRUPTED.store(true, Ordering::SeqCst);
     }
     unsafe {
-        libc::signal(libc::SIGINT, handler as usize as extern "C" fn(i32));
-        libc::signal(libc::SIGTERM, handler as usize as extern "C" fn(i32));
+        libc::signal(libc::SIGINT, handler as usize);
+        libc::signal(libc::SIGTERM, handler as usize);
     }
 }
 
