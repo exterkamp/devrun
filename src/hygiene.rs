@@ -363,7 +363,7 @@ mod tests {
     #[test]
     fn scanner_reads_fake_proc() {
         // Build a tiny fake /proc: one pid holding socket inode 4242, which
-        // net/tcp says is LISTEN on 41055 (0xA057).
+        // net/tcp says is LISTEN on 41047 (0xA057).
         let root = std::env::temp_dir().join(format!("devrun-fakeproc-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let pid_dir = root.join("777");
@@ -386,11 +386,11 @@ mod tests {
         let sc = Scanner::with_root(root.to_str().unwrap());
         let ls = sc.listeners().unwrap();
         assert_eq!(ls.len(), 1, "{ls:?}");
-        assert_eq!(ls[0].port, 41055);
+        assert_eq!(ls[0].port, 41047);
         assert_eq!(ls[0].pid, 777);
         assert_eq!(ls[0].pgid, 777);
         assert_eq!(ls[0].start, 555);
-        assert_eq!(sc.group_ports(777).unwrap(), vec![41055]);
+        assert_eq!(sc.group_ports(777).unwrap(), vec![41047]);
         assert!(sc.group_ports(999).unwrap().is_empty());
         let _ = std::fs::remove_dir_all(&root);
     }
