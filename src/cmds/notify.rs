@@ -127,3 +127,81 @@ pub fn cmd_clear(env: &mut Env, args: &[String]) -> CmdResult {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rtime::Time;
+
+    fn entry() -> Entry {
+        Entry {
+            key: "app:/home/u/app:web".into(),
+            project: "app".into(),
+            worktree: "/home/u/app".into(),
+            branch: "main".into(),
+            name: "web".into(),
+            kind: "proc".into(),
+            pid: 1,
+            pgid: 1,
+            pid_start: 0,
+            cmd: vec![],
+            ports: [("PORT".to_string(), 41001)].into_iter().collect(),
+            primary_port: "PORT".into(),
+            compose_project: String::new(),
+            started_at: Time(0),
+            owner: None,
+            flagged: None,
+            log: String::new(),
+        }
+    }
+
+    #[test]
+    fn split_cases() {
+        let one = vec!["hello".to_string()];
+        assert_eq!(split_name_message(&one).unwrap(), (String::new(), "hello".into()));
+        let two = vec!["web".to_string(), "hello".to_string()];
+        assert_eq!(
+            split_name_message(&two).unwrap(),
+            ("web".to_string(), "hello".to_string())
+        );
+        assert!(split_name_message(&[]).is_err());
+        assert!(split_name_message(&["a".into(), "b".into(), "c".into()]).is_err());
+    }
+
+    #[test]
+    fn notify_text_shape() {
+        let e = entry();
+        let (title, body) = notify_text(&e, "check the layout");
+        assert_eq!(title, "app/app: inspect :41001");
+        assert!(body.starts_with("http://127.0.0.1:41001 "), "URL leads: {body}");
+        assert!(body.ends_with("check the layout"));
+    }
+
+    #[test]
+    fn notify_and_clear_round_trip() {
+        let dir = std::env::temp_dir().join(format!("devrun-notify-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let (mut env, out, _err) = crate::cli::test_env(dir.clone(), "/tmp");
+        env.store
+            .update(|f| {
+                f.upsert(entry());
+                Ok(())
+            })
+            .unwrap();
+        // Outside git with exactly one entry, resolve-by-no-arg finds it.
+        cmd_notify(&mut env, &["just look".to_string(), "--json".to_string()]).unwrap();
+        let f = env.store.load().unwrap();
+        assert_eq!(
+            f.entries[0].flagged.as_ref().unwrap().message,
+            "just look"
+        );
+        let out_text = crate::cli::SharedBuf::text(&out);
+        assert!(out_text.contains("\"flagged\":true"), "{out_text}");
+        assert!(out_text.contains("\"notified\":false"), "no herdr in tests: {out_text}");
+        cmd_clear(&mut env, &[]).unwrap();
+        let f = env.store.load().unwrap();
+        assert!(f.entries[0].flagged.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
