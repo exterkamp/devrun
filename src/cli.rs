@@ -265,3 +265,13 @@ pub fn install_signal_handlers() {
         libc::signal(libc::SIGTERM, handler as usize as extern "C" fn(i32));
     }
 }
+
+/// Flatten a CmdError to its message (for places, like registry update
+/// closures, that carry plain string errors).
+pub fn err_string(e: CmdError) -> String {
+    match e {
+        CmdError::Msg(m) => m,
+        CmdError::Exit { msg, .. } => msg,
+        CmdError::Help => String::new(),
+    }
+}
