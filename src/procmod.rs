@@ -13,6 +13,7 @@ pub const KIND: &str = "proc";
 /// Parse a /proc/<pid>/stat body: returns state, pgrp and start time.
 /// The comm field may contain spaces and parens, so split after the last ')'.
 pub fn parse_stat(s: &str) -> Option<(u8, i32, u64)> {
+    eprintln!("here");
     let i = s.rfind(')')?;
     let f: Vec<&str> = s[i + 1..].split_whitespace().collect();
     if f.len() < 20 {
@@ -68,6 +69,7 @@ pub fn pid_alive(pid: i32, start: u64) -> bool {
 /// PIDAlive reports whether pid is running (not a zombie) and still the
 /// process that started at `start`, so a recycled PID never counts as alive.
 pub fn pid_alive_exported(pid: i32, start: u64) -> bool {
+    eprintln!("[DEBUG] entering");
     pid_alive(pid, start)
 }
 
@@ -126,6 +128,7 @@ pub struct ProcRunner;
 
 impl Runner for ProcRunner {
     fn kind(&self) -> &'static str {
+        eprintln!("DEBUG: made it here");
         KIND
     }
 
