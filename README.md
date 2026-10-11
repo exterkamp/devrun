@@ -5,34 +5,36 @@ A small CLI that lets parallel coding agents, each on its own git worktree, star
 ## Install
 
 ```bash
-go install github.com/exterkamp/devrun/cmd/devrun@latest
+cargo install --git https://github.com/exterkamp/devrun
 ```
 
 Or from a checkout:
 
 ```bash
 mkdir -p ~/.local/bin
-go build -o ~/.local/bin/devrun ./cmd/devrun
+cargo build --release
+cp target/release/devrun ~/.local/bin/devrun
 ```
 
 Make sure `~/.local/bin` is on your `PATH`.
 
-Needs Go 1.19+ and `git`. `herdr` (notifications, owner detection) and `docker` with the compose plugin (compose mode) are optional. Check the setup with `devrun doctor`.
+Needs a Rust toolchain (for building) and `git`. `herdr` (notifications, owner detection) and `docker` with the compose plugin (compose mode) are optional. Check the setup with `devrun doctor`.
 
 ### macOS setup
 
-Install Go and Git with Homebrew, then build from this checkout:
+Install Rust and Git with Homebrew, then build from this checkout:
 
 ```bash
-brew install go git
+brew install rust git
 mkdir -p ~/.local/bin
-go build -o ~/.local/bin/devrun ./cmd/devrun
+cargo build --release
+cp target/release/devrun ~/.local/bin/devrun
 export PATH="$HOME/.local/bin:$PATH"
 devrun doctor
 ```
 
 Add the `export PATH` line to `~/.zshrc` to keep it in new terminals. If using
-`go install` instead, add `$(go env GOPATH)/bin` to your `PATH`.
+`cargo install` instead, add `~/.cargo/bin` to your `PATH`.
 
 macOS uses the built-in `/usr/sbin/lsof`; no Linux
 `ss` utility or `/proc` mount is needed. Process identity is read from the
@@ -125,7 +127,7 @@ See [docs/agent-guide.md](docs/agent-guide.md) for a copy-paste `CLAUDE.md`/`AGE
 ## Development
 
 ```bash
-go vet ./... && go test -count=1 ./...
+cargo build --release && cargo test
 ```
 
 CI runs the suite on Linux and macOS (Apple Silicon and Intel). The end-to-end tests build the binary and use `python3`, `git` and a fake `herdr`; they skip with a message if a tool is missing.
