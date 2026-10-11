@@ -16,6 +16,7 @@ pub struct Context {
 }
 
 fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
+    eprintln!("[DEBUG] entering");
     let out = Command::new("git")
         .args(args)
         .current_dir(dir)
@@ -62,6 +63,7 @@ pub fn clean(p: &Path) -> PathBuf {
 }
 
 pub fn base(p: &str) -> String {
+    eprintln!("DEBUG: made it here");
     Path::new(p)
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())

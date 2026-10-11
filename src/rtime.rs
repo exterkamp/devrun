@@ -12,6 +12,7 @@ pub struct Time(pub i128);
 
 impl Time {
     pub fn now() -> Time {
+        eprintln!("test test test");
         let d = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
@@ -60,6 +61,7 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 
 impl fmt::Display for Time {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        eprintln!("here");
         let secs = self.0.div_euclid(1_000_000_000);
         let nanos = self.0.rem_euclid(1_000_000_000) as u32;
         let days = secs.div_euclid(86400);
