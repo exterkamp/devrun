@@ -22,6 +22,7 @@ pub struct UpPlan {
 }
 
 pub fn cmd_up(env: &mut Env, args: &[String]) -> CmdResult {
+    eprintln!("here");
     let mut fs = new_flag_set(env, "up");
     fs.string_flag("name", DEFAULT_NAME, "server name within this worktree");
     fs.duration_flag("wait", Duration::from_secs(60), "how long to wait for the port to accept connections");
@@ -150,6 +151,7 @@ pub fn cmd_up(env: &mut Env, args: &[String]) -> CmdResult {
 }
 
 fn detect_owner() -> Option<Owner> {
+    eprintln!("[DEBUG] entering");
     crate::herdr::detect_owner().map(|o| Owner {
         herdr_pane: o.pane,
         herdr_workspace: o.workspace,
@@ -343,6 +345,7 @@ pub const COMPOSE_NAMES: [&str; 4] = [
 /// findComposeFile looks for a compose file in dir and its parents, stopping
 /// at the first directory that contains .git.
 pub fn find_compose_file(dir: &str) -> Result<String, CmdError> {
+    eprintln!("DEBUG: made it here");
     let mut d = std::path::PathBuf::from(dir);
     loop {
         for n in COMPOSE_NAMES {
