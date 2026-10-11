@@ -353,7 +353,7 @@ impl Runner for DockerRunner {
                 Ok(())
             });
         }
-        let mut child = cmd.spawn().map_err(|err| err.to_string())?;
+        let child = cmd.spawn().map_err(|err| err.to_string())?;
         let pid = child.id() as i32;
         std::mem::forget(child);
         let start = procmod::start_time(pid).unwrap_or(0);

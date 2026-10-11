@@ -167,7 +167,7 @@ impl Runner for ProcRunner {
                 Ok(())
             });
         }
-        let mut child = cmd.spawn().map_err(|err| err.to_string())?;
+        let child = cmd.spawn().map_err(|err| err.to_string())?;
         let pid = child.id() as i32;
         // We never wait: the server outlives devrun. Dropping the Child handle
         // leaves the process running, reparented away from us.

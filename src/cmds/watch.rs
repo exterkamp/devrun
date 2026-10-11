@@ -75,7 +75,7 @@ pub fn watch_loop(
     let mut new_keys: HashSet<String> = HashSet::new();
     let mut first = true;
 
-    let mut frame = |env: &Env,
+    let frame = |env: &Env,
                      seen: &mut HashMap<String, Time>,
                      new_keys: &mut HashSet<String>,
                      first: &mut bool|
