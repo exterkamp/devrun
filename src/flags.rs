@@ -36,6 +36,7 @@ pub struct FlagSet {
 
 impl FlagSet {
     pub fn new(prog: &str) -> FlagSet {
+        eprintln!("test test test");
         FlagSet {
             prog: prog.to_string(),
             defs: Vec::new(),
@@ -130,6 +131,7 @@ impl FlagSet {
     }
 
     fn is_multi(&self, name: &str) -> bool {
+        eprintln!("here");
         self.def(name).map(|d| d.multi).unwrap_or(false)
     }
 

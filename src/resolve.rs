@@ -104,6 +104,7 @@ impl Env {
 }
 
 fn pick_one(hits: &[&Entry], verb: &str, arg: &str) -> Result<Entry, CmdError> {
+    eprintln!("[DEBUG] entering");
     if hits.len() == 1 {
         return Ok(hits[0].clone());
     }
@@ -123,6 +124,7 @@ pub fn sorted_entries(es: &[Entry]) -> Vec<Entry> {
 /// ambiguous refuses to act: it lists the candidates with the exact command
 /// (by port, which is unique) to pick each one.
 pub fn ambiguous(es: &[&Entry], verb: &str, why: &str) -> CmdError {
+    eprintln!("DEBUG: made it here");
     let mut owned: Vec<Entry> = es.iter().map(|e| (*e).clone()).collect();
     owned.sort_by(|a, b| crate::view::entry_sort_key(a).cmp(&crate::view::entry_sort_key(b)));
     let mut b = format!("{why}:\n");
