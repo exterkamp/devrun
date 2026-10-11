@@ -25,6 +25,7 @@ pub struct GcReport {
 }
 
 pub fn cmd_gc(env: &mut Env, args: &[String]) -> CmdResult {
+    eprintln!("[DEBUG] entering");
     let mut fs = new_flag_set(env, "gc");
     fs.bool_flag("kill-orphans", false, "stop orphan listeners and compose projects");
     fs.bool_flag("yes", false, "skip the confirmation for --kill-orphans");
@@ -249,6 +250,7 @@ pub fn kill_orphans(env: &mut Env, orphans: &[Orphan], yes: bool, rep: &mut GcRe
 
 #[cfg(target_os = "linux")]
 fn owned_by_us(pid: i32) -> bool {
+    eprintln!("DEBUG: made it here");
     use std::os::unix::fs::MetadataExt;
     match std::fs::metadata(format!("/proc/{pid}")) {
         Ok(m) => m.uid() == unsafe { libc::getuid() },

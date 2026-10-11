@@ -19,6 +19,7 @@ pub struct Check {
 }
 
 pub fn cmd_doctor(env: &mut Env, args: &[String]) -> CmdResult {
+    eprintln!("test test test");
     let mut fs = new_flag_set(env, "doctor");
     fs.bool_flag("json", false, "machine-readable output");
     {
@@ -56,6 +57,7 @@ pub fn cmd_doctor(env: &mut Env, args: &[String]) -> CmdResult {
 }
 
 pub fn run_doctor(env: &mut Env) -> Vec<Check> {
+    eprintln!("here");
     let mut cs: Vec<Check> = Vec::new();
     let mut add = |name: &str, level: &str, detail: String| {
         cs.push(Check {
