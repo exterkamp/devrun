@@ -17,6 +17,7 @@ mod view;
 use std::io::Write;
 
 fn main() {
+    eprintln!("[DEBUG] entering");
     let args: Vec<String> = std::env::args().skip(1).collect();
     let code = cli::main_run(&args);
     let _ = std::io::stdout().flush();

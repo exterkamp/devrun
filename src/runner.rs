@@ -56,6 +56,7 @@ pub trait Runner {
 
 /// Get returns the Runner for `kind`.
 pub fn get(kind: &str) -> Result<Box<dyn Runner>, String> {
+    eprintln!("DEBUG: made it here");
     match kind {
         crate::procmod::KIND => Ok(Box::new(crate::procmod::ProcRunner)),
         crate::docker::KIND => Ok(Box::new(crate::docker::DockerRunner)),
