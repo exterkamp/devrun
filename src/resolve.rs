@@ -198,3 +198,97 @@ pub fn stop_stale(env: &mut Env) -> usize {
     }
     n
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::registry::RegistryFile;
+    use crate::rtime::Time;
+
+    fn entry(project: &str, wt: &str, name: &str, port: i32) -> Entry {
+        Entry {
+            key: crate::registry::key(project, wt, name),
+            project: project.into(),
+            worktree: wt.into(),
+            branch: "main".into(),
+            name: name.into(),
+            kind: "proc".into(),
+            pid: 0,
+            pgid: 0,
+            pid_start: 0,
+            cmd: vec![],
+            ports: [("PORT".to_string(), port)].into_iter().collect(),
+            primary_port: "PORT".into(),
+            compose_project: String::new(),
+            started_at: Time(0),
+            owner: None,
+            flagged: None,
+            log: String::new(),
+        }
+    }
+
+    fn env_with(entries: Vec<Entry>) -> (Env, RegistryFile) {
+        let dir = std::env::temp_dir().join(format!("devrun-resolve-{}", std::process::id()));
+        let (env, _o, _e) = crate::cli::test_env(dir, "/tmp");
+        let mut f = RegistryFile::default();
+        for e in entries {
+            f.upsert(e);
+        }
+        (env, f)
+    }
+
+    #[test]
+    fn resolve_by_port() {
+        let (env, f) = env_with(vec![entry("a", "/w1", "web", 41001)]);
+        let e = env.resolve_entry(&f, "url", "41001").unwrap();
+        assert_eq!(e.name, "web");
+    }
+
+    #[test]
+    fn resolve_by_project_slash_name() {
+        let (env, f) = env_with(vec![
+            entry("a", "/w1", "web", 41001),
+            entry("b", "/w2", "web", 41002),
+        ]);
+        let e = env.resolve_entry(&f, "stop", "b/web").unwrap();
+        assert_eq!(e.port(), 41002);
+    }
+
+    #[test]
+    fn resolve_unique_name_globally() {
+        let (env, f) = env_with(vec![entry("a", "/w1", "api", 41001)]);
+        let e = env.resolve_entry(&f, "logs", "api").unwrap();
+        assert_eq!(e.project, "a");
+    }
+
+    #[test]
+    fn ambiguous_name_is_refused_with_candidates() {
+        let (env, f) = env_with(vec![
+            entry("a", "/w1", "web", 41001),
+            entry("b", "/w2", "web", 41002),
+        ]);
+        let err = env.resolve_entry(&f, "stop", "web").unwrap_err();
+        let m = crate::cli::err_string(err);
+        assert!(m.contains("matches 2 servers"), "{m}");
+        assert!(m.contains("devrun stop 41001"), "{m}");
+    }
+
+    #[test]
+    fn not_found_lists_current_servers() {
+        let (env, f) = env_with(vec![entry("a", "/w1", "web", 41001)]);
+        let err = env.resolve_entry(&f, "url", "nope").unwrap_err();
+        let m = crate::cli::err_string(err);
+        assert!(m.contains("no server matching"), "{m}");
+        assert!(m.contains("a/web"), "{m}");
+    }
+
+    #[test]
+    fn no_arg_with_no_entries() {
+        let (env, f) = env_with(vec![]);
+        // cwd /tmp is not a git worktree in this environment; with zero
+        // entries either path reports that nothing is registered.
+        let err = env.resolve_entry(&f, "url", "").unwrap_err();
+        let m = crate::cli::err_string(err);
+        assert!(m.contains("no server"), "{m}");
+    }
+}
