@@ -3,7 +3,7 @@
 use crate::cli::{flag_err, help_printer, new_flag_set, CmdError, CmdResult, Env};
 use crate::herdr;
 use crate::render::{paint, ANSI_GREEN, ANSI_RED, ANSI_YELLOW};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::io::Write;
 
 pub const LEVEL_OK: &str = "ok";
@@ -11,7 +11,7 @@ pub const LEVEL_WARN: &str = "warn";
 pub const LEVEL_FAIL: &str = "FAIL";
 
 /// Check is one doctor finding.
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Check {
     pub name: String,
     pub level: String,
