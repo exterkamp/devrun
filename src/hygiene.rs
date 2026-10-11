@@ -311,3 +311,108 @@ impl ComposeAccess {
 pub fn compose() -> ComposeAccess {
     ComposeAccess
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn listener(port: i32, pid: i32, pgid: i32) -> Listener {
+        Listener {
+            port,
+            pid,
+            pgid,
+            start: 42,
+        }
+    }
+
+    #[test]
+    fn port_orphans_filters() {
+        let ls = vec![
+            listener(41001, 10, 10),
+            listener(41002, 11, 11), // registered
+            listener(3000, 12, 12),  // outside range
+            listener(41999, 13, 13),  // edge of range
+        ];
+        let registered: HashSet<i32> = [41002].into_iter().collect();
+        let got = port_orphans(&ls, &registered, 41000, 41999);
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].port, 41001);
+        assert_eq!(got[0].kind, "port");
+        assert_eq!(got[1].port, 41999);
+        // JSON shape: compose_project omitted, port/pid present.
+        let s = serde_json::to_string(&got[0]).unwrap();
+        assert!(s.contains("\"kind\":\"port\""), "{s}");
+        assert!(!s.contains("compose_project"), "{s}");
+    }
+
+    #[test]
+    fn orphan_compose_json_shape() {
+        let o = Orphan {
+            kind: "compose".into(),
+            port: 0,
+            pid: 0,
+            project: "devrun-x-abc123".into(),
+            listen: None,
+        };
+        let s = serde_json::to_string(&o).unwrap();
+        assert!(s.contains("\"compose_project\":\"devrun-x-abc123\""), "{s}");
+        assert!(!s.contains("\"port\""), "{s}");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn scanner_reads_fake_proc() {
+        // Build a tiny fake /proc: one pid holding socket inode 4242, which
+        // net/tcp says is LISTEN on 41055 (0xA057).
+        let root = std::env::temp_dir().join(format!("devrun-fakeproc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let pid_dir = root.join("777");
+        std::fs::create_dir_all(pid_dir.join("fd")).unwrap();
+        std::fs::create_dir_all(root.join("net")).unwrap();
+        std::fs::write(
+            root.join("net/tcp"),
+            "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n\
+             0: 0100007F:A057 00000000:0000 0A 00000000:00000000 00:00000000 00000000 1000 0 4242 1 0000000000000000 100 0 0 10 0\n",
+        )
+        .unwrap();
+        std::fs::write(root.join("net/tcp6"), "").unwrap();
+        // stat: pid (comm) state ppid pgrp ... field 22 (index 19 after ')') = 555
+        std::fs::write(
+            pid_dir.join("stat"),
+            "777 (fake) S 1 777 777 0 -1 4194304 0 0 0 0 0 0 0 0 20 0 1 0 555 0 0",
+        )
+        .unwrap();
+        std::os::unix::fs::symlink("socket:[4242]", pid_dir.join("fd/3")).unwrap();
+        let sc = Scanner::with_root(root.to_str().unwrap());
+        let ls = sc.listeners().unwrap();
+        assert_eq!(ls.len(), 1, "{ls:?}");
+        assert_eq!(ls[0].port, 41055);
+        assert_eq!(ls[0].pid, 777);
+        assert_eq!(ls[0].pgid, 777);
+        assert_eq!(ls[0].start, 555);
+        assert_eq!(sc.group_ports(777).unwrap(), vec![41055]);
+        assert!(sc.group_ports(999).unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn kill_refuses_recycled_or_self() {
+        let sc = Scanner::new();
+        // Our own pid: Kill must refuse outright.
+        let me = Listener {
+            port: 41001,
+            pid: std::process::id() as i32,
+            pgid: 0,
+            start: 0,
+        };
+        assert_eq!(sc.kill(&me, Duration::from_millis(1)).unwrap(), false);
+        // A pid that does not exist: start time will not match.
+        let ghost = Listener {
+            port: 41001,
+            pid: 999_999,
+            pgid: 0,
+            start: 1,
+        };
+        assert_eq!(sc.kill(&ghost, Duration::from_millis(1)).unwrap(), false);
+    }
+}
