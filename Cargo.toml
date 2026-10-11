@@ -1,0 +1,19 @@
+[package]
+name = "devrun"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Port allocation and dev-server tracking for parallel coding agents on git worktrees"
+
+[[bin]]
+name = "devrun"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"
+sha1 = "0.10"
+
+[profile.release]
+opt-level = 2
