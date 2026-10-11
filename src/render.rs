@@ -267,3 +267,123 @@ pub fn tab_write(out: &mut dyn Write, rows: &[Vec<String>]) -> std::io::Result<(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::STATE_UP;
+    use crate::registry::Flag;
+    use std::collections::HashSet;
+
+    fn view(name: &str, port: i32, flagged: bool) -> View {
+        View {
+            key: format!("a:/w:{name}"),
+            project: "a".into(),
+            worktree: "/w".into(),
+            branch: "main".into(),
+            name: name.into(),
+            kind: "proc".into(),
+            state: STATE_UP.into(),
+            pid: 1,
+            port,
+            ports: [("PORT".to_string(), port)].into_iter().collect(),
+            url: format!("http://127.0.0.1:{port}"),
+            started_at: Time::from_unix(1_789_000_000, 0),
+            age_seconds: 0,
+            log: "/tmp/x".into(),
+            owner: None,
+            flagged: flagged.then(|| Flag {
+                at: Time::from_unix(1_789_000_000, 0),
+                message: "look at this".into(),
+            }),
+        }
+    }
+
+    fn opts(width: usize) -> RenderOpts {
+        RenderOpts {
+            width,
+            color: false,
+            now: Time::from_unix(1_789_000_060, 0),
+            new_keys: HashSet::new(),
+            project: String::new(),
+        }
+    }
+
+    #[test]
+    fn empty_frame() {
+        let lines = render_frame(&[], &opts(120));
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("0 server(s)"));
+        assert!(lines[1].contains("no servers running"));
+    }
+
+    #[test]
+    fn wide_frame_has_header_and_url() {
+        let vs = vec![view("web", 41001, false)];
+        let lines = render_frame(&vs, &opts(140));
+        assert!(lines.iter().any(|l| l.contains("PROJECT")), "{lines:?}");
+        assert!(lines.iter().any(|l| l.contains("http://127.0.0.1:41001")));
+        for l in &lines {
+            assert!(l.chars().count() <= 140);
+        }
+    }
+
+    #[test]
+    fn narrow_frame_two_lines_per_server() {
+        let vs = vec![view("web", 41001, false)];
+        let lines = render_frame(&vs, &opts(40));
+        assert_eq!(lines.len(), 3, "{lines:?}");
+        assert!(lines[1].contains(":41001"));
+    }
+
+    #[test]
+    fn flagged_rows_show_message_and_new_tag() {
+        let mut o = opts(140);
+        let vs = vec![view("web", 41001, true)];
+        o.new_keys.insert("a:/w:web".into());
+        let lines = render_frame(&vs, &o);
+        assert!(lines.iter().any(|l| l.contains("NEW !")), "{lines:?}");
+        assert!(lines.iter().any(|l| l.contains("look at this")));
+        assert!(lines[0].contains("1 flagged"));
+    }
+
+    #[test]
+    fn pad_and_paint() {
+        assert_eq!(pad("ab", 5), "ab   ");
+        assert_eq!(pad("abcdef", 3), "ab…");
+        assert_eq!(paint(false, ANSI_BOLD, "x"), "x");
+        assert_eq!(paint(true, ANSI_BOLD, "x"), format!("{ANSI_BOLD}x{ANSI_RESET}"));
+        assert_eq!(paint(true, ANSI_BOLD, ""), "");
+    }
+
+    #[test]
+    fn tab_write_aligns() {
+        let rows = vec![
+            vec!["A".to_string(), "B".to_string()],
+            vec!["longer".to_string(), "x".to_string()],
+        ];
+        let mut out: Vec<u8> = Vec::new();
+        tab_write(&mut out, &rows).unwrap();
+        let s = String::from_utf8(out).unwrap();
+        let lines: Vec<&str> = s.lines().collect();
+        assert_eq!(lines[0], "A       B");
+        assert_eq!(lines[1], "longer  x");
+    }
+
+    #[test]
+    fn owner_label_shapes() {
+        let mut v = view("web", 41001, false);
+        assert_eq!(owner_label(&v), "-");
+        v.owner = Some(crate::registry::Owner {
+            herdr_pane: "p1".into(),
+            agent: "claude".into(),
+            ..Default::default()
+        });
+        assert_eq!(owner_label(&v), "claude@p1");
+        v.owner = Some(crate::registry::Owner {
+            agent: "claude".into(),
+            ..Default::default()
+        });
+        assert_eq!(owner_label(&v), "claude");
+    }
+}
