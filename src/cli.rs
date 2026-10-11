@@ -275,3 +275,116 @@ pub fn err_string(e: CmdError) -> String {
         CmdError::Help => String::new(),
     }
 }
+
+/// A writer that appends into a shared buffer, for tests.
+#[cfg(test)]
+#[derive(Clone)]
+pub struct SharedBuf(pub std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+#[cfg(test)]
+impl std::io::Write for SharedBuf {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+impl SharedBuf {
+    pub fn new() -> (SharedBuf, std::sync::Arc<std::sync::Mutex<Vec<u8>>>) {
+        let a = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        (SharedBuf(a.clone()), a)
+    }
+    pub fn text(a: &std::sync::Arc<std::sync::Mutex<Vec<u8>>>) -> String {
+        String::from_utf8_lossy(&a.lock().unwrap()).into_owned()
+    }
+}
+
+/// Build an Env rooted at a temp state dir, for tests.
+#[cfg(test)]
+pub fn test_env(
+    dir: std::path::PathBuf,
+    cwd: &str,
+) -> (
+    Env,
+    std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+    std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+) {
+    let (out_w, out_a) = SharedBuf::new();
+    let (err_w, err_a) = SharedBuf::new();
+    (
+        Env {
+            stdout: Box::new(out_w),
+            stderr: Box::new(err_w),
+            stdin: Box::new(std::io::Cursor::new(Vec::new())),
+            cwd: cwd.to_string(),
+            store: Store { dir },
+            alloc: Allocator::new(),
+            now: crate::rtime::Time::now,
+            listening: crate::alloc::listening,
+        },
+        out_a,
+        err_a,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir(tag: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "devrun-cli-{tag}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn usage_lists_every_command() {
+        let (mut env, _out, err) = test_env(temp_dir("usage"), "/tmp");
+        assert_eq!(run(&mut env, &["--help".to_string()]), 0);
+        let text = SharedBuf::text(&err);
+        for name in [
+            "up", "ls", "url", "logs", "stop", "notify", "clear", "gc", "doctor", "hook", "watch",
+        ] {
+            assert!(text.contains(name), "missing {name} in:\n{text}");
+        }
+    }
+
+    #[test]
+    fn no_args_is_exit_2_and_unknown_is_exit_2() {
+        let (mut env, _o, _e) = test_env(temp_dir("codes"), "/tmp");
+        assert_eq!(run(&mut env, &[]), 2);
+        let (mut env2, _o2, _e2) = test_env(temp_dir("codes2"), "/tmp");
+        assert_eq!(run(&mut env2, &["frobnicate".to_string()]), 2);
+    }
+
+    #[test]
+    fn slug_cases() {
+        assert_eq!(slug("My App!"), "My-App");
+        assert_eq!(slug("a/b/c"), "a-b-c");
+        assert_eq!(slug("--x--"), "x");
+        assert_eq!(slug("keep.this_name-ok"), "keep.this_name-ok");
+    }
+
+    #[test]
+    fn log_path_shape() {
+        let (env, _o, _e) = test_env(temp_dir("logpath"), "/tmp");
+        let p = env.log_path("my-app", "/home/u/my-app", "web");
+        assert!(p.ends_with("logs/my-app-my-app-web.log"), "{p}");
+    }
+
+    #[test]
+    fn help_flag_in_command_prints_and_exits_0() {
+        let (mut env, _o, err) = test_env(temp_dir("help"), "/tmp");
+        let code = run(&mut env, &["ls".to_string(), "-h".to_string()]);
+        assert_eq!(code, 0);
+        assert!(SharedBuf::text(&err).contains("-json"), "flag help printed");
+    }
+}
