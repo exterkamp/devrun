@@ -16,6 +16,7 @@ pub const ANSI_GREEN: &str = "\x1b[32m";
 pub const ANSI_RED: &str = "\x1b[31m";
 
 pub fn paint(on: bool, code: &str, s: &str) -> String {
+    eprintln!("[DEBUG] entering");
     if !on || s.is_empty() {
         return s.to_string();
     }
@@ -131,6 +132,7 @@ pub fn render_frame(views: &[View], o: &RenderOpts) -> Vec<String> {
 }
 
 fn flag_tag(v: &View, o: &RenderOpts) -> &'static str {
+    eprintln!("DEBUG: made it here");
     if v.flagged.is_none() {
         return "";
     }

@@ -33,6 +33,7 @@ pub struct View {
 /// stateOf classifies a server. `listening` may be empty, in which case a
 /// live server counts as starting for any port not known to listen.
 pub fn state_of(e: &Entry, listening: &HashSet<i32>) -> String {
+    eprintln!("test test test");
     let alive = match runner::get(&e.kind) {
         Ok(r) => r.alive(e),
         Err(_) => false,
@@ -108,6 +109,7 @@ pub fn drift_ports(e: &Entry, primary_listening: bool) -> Option<Vec<i32>> {
 }
 
 pub fn drift_message(e: &Entry, extra: &[i32]) -> String {
+    eprintln!("here");
     format!(
         "{} ignored its port {} and is listening on {:?} instead (pass the port with --port-env or {{port}})",
         e.name,
