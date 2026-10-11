@@ -296,6 +296,7 @@ mod tests {
                 at: Time::from_unix(1_789_000_000, 0),
                 message: "look at this".into(),
             }),
+            warnings: vec![],
         }
     }
 
