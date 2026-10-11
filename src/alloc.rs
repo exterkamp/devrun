@@ -220,3 +220,138 @@ fn listening_via_ss() -> Result<HashSet<i32>, String> {
 pub fn listening() -> Result<HashSet<i32>, String> {
     Ok(crate::hygiene::Scanner::new().listeners()?.iter().map(|l| l.port).collect())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::registry::{Entry, RegistryFile};
+    use std::io::Cursor;
+
+    #[test]
+    fn fnv_matches_go() {
+        // hash/fnv New32a reference values.
+        assert_eq!(hash(""), 2166136261);
+        assert_eq!(hash("a"), 0xe40c292c);
+        assert_eq!(hash("devrun"), hash("devrun"));
+        assert_ne!(hash("devrun"), hash("devrum"));
+    }
+
+    #[test]
+    fn pick_wraps_and_skips() {
+        let p = pick("x", 41000, 41002, |_| false).unwrap();
+        assert!((41000..=41002).contains(&p));
+        let first = p;
+        let second = pick("x", 41000, 41002, |q| q == first).unwrap();
+        assert_ne!(second, first);
+        assert!(pick("x", 41000, 41002, |_| true).is_none());
+        // Deterministic: same name, same start.
+        assert_eq!(pick("same", 41000, 41999, |_| false), pick("same", 41000, 41999, |_| false));
+    }
+
+    #[test]
+    fn parse_proc_net() {
+        let sample = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n\
+                            0: 0100007F:A029 00000000:0000 0A 00000000:00000000 00:00000000 00000000 1000 0 12345 1 0000000000000000 100 0 0 10 0\n\
+                            1: 00000000:1F90 00000000:0000 01 00000000:00000000 00:00000000 00000000 1000 0 12346 1 0000000000000000 100 0 0 10 0\n";
+        let mut ports = HashSet::new();
+        parse_proc_net_tcp(Cursor::new(sample), &mut ports).unwrap();
+        assert!(ports.contains(&41001), "0xA029 = 41001, state 0A only: {ports:?}");
+        assert!(!ports.contains(&8080), "state 01 is not LISTEN");
+    }
+
+    fn bare_allocator() -> Allocator {
+        Allocator {
+            min: MIN_PORT,
+            max: MAX_PORT,
+            sources: vec![],
+            available: None,
+        }
+    }
+
+    #[test]
+    fn allocate_is_stable_across_stop() {
+        let a = bare_allocator();
+        let mut f = RegistryFile::default();
+        let names = vec!["PORT".to_string()];
+        let p1 = a.allocate(&mut f, "app:/w:web", &names).unwrap()["PORT"];
+        assert!((MIN_PORT..=MAX_PORT).contains(&p1));
+        // Entry removed (stop); reservation remains, so the port comes back.
+        let p2 = a.allocate(&mut f, "app:/w:web", &names).unwrap()["PORT"];
+        assert_eq!(p1, p2);
+    }
+
+    #[test]
+    fn allocate_avoids_registry_and_other_reservations() {
+        let a = bare_allocator();
+        let mut f = RegistryFile::default();
+        let names = vec!["PORT".to_string()];
+        let p1 = a.allocate(&mut f, "app:/w:web", &names).unwrap()["PORT"];
+        // Another key must not take the reserved port while room remains.
+        let p2 = a.allocate(&mut f, "app:/w2:web", &names).unwrap()["PORT"];
+        assert_ne!(p1, p2);
+        // A live entry's port is busy too.
+        f.entries.push(Entry {
+            key: "x:/x:web".into(),
+            project: "x".into(),
+            worktree: "/x".into(),
+            branch: String::new(),
+            name: "web".into(),
+            kind: "proc".into(),
+            pid: 0,
+            pgid: 0,
+            pid_start: 0,
+            cmd: vec![],
+            ports: [("PORT".to_string(), p2)].into_iter().collect(),
+            primary_port: String::new(),
+            compose_project: String::new(),
+            started_at: crate::rtime::Time(0),
+            owner: None,
+            flagged: None,
+            log: String::new(),
+        });
+        let p3 = a.allocate(&mut f, "app:/w3:web", &names).unwrap()["PORT"];
+        assert_ne!(p3, p2);
+    }
+
+    #[test]
+    fn allocate_multiple_names_get_distinct_ports() {
+        let a = bare_allocator();
+        let mut f = RegistryFile::default();
+        let names = vec!["WEB_PORT".to_string(), "API_PORT".to_string()];
+        let got = a.allocate(&mut f, "app:/w:web", &names).unwrap();
+        assert_ne!(got["WEB_PORT"], got["API_PORT"]);
+    }
+
+    #[test]
+    fn allocate_exhaustion() {
+        let a = Allocator {
+            min: 41000,
+            max: 41000,
+            sources: vec![|| Ok([41000].into_iter().collect())],
+            available: None,
+        };
+        let mut f = RegistryFile::default();
+        let err = a
+            .allocate(&mut f, "app:/w:web", &["PORT".to_string()])
+            .unwrap_err();
+        assert!(err.contains("no free port"), "{err}");
+    }
+
+    #[test]
+    fn allocate_respects_listener_source() {
+        let a = bare_allocator();
+        let mut f = RegistryFile::default();
+        let names = vec!["PORT".to_string()];
+        let want = a.allocate(&mut f, "k:/w:web", &names).unwrap()["PORT"];
+        // Now pretend that port is listening on the host for someone else.
+        let a2 = Allocator {
+            min: MIN_PORT,
+            max: MAX_PORT,
+            sources: vec![move || Ok([want].into_iter().collect())],
+            available: None,
+        };
+        let mut f2 = RegistryFile::default();
+        let got = a2.allocate(&mut f2, "k:/w:web", &names).unwrap()["PORT"];
+        assert_ne!(got, want);
+    }
+}
