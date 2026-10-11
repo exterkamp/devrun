@@ -122,3 +122,58 @@ pub fn project_from_common_dir(common: &str) -> String {
         .unwrap_or(&base(common))
         .to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn project_from_common_dir_cases() {
+        assert_eq!(project_from_common_dir("/x/repo/.git"), "repo");
+        assert_eq!(project_from_common_dir("/x/repo.git"), "repo");
+        assert_eq!(project_from_common_dir("/x/plain"), "plain");
+    }
+
+    #[test]
+    fn clean_paths() {
+        assert_eq!(clean(Path::new("/a/b/../c")), PathBuf::from("/a/c"));
+        assert_eq!(clean(Path::new("/a/./b/")), PathBuf::from("/a/b"));
+        assert_eq!(clean(Path::new("/")), PathBuf::from("/"));
+    }
+
+    #[test]
+    fn resolve_outside_git() {
+        let dir = std::env::temp_dir().join(format!("devrun-notgit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let c = resolve(&dir.to_string_lossy()).unwrap();
+        assert!(!c.in_git);
+        assert_eq!(c.worktree, dir.to_string_lossy());
+        assert!(c.branch.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn resolve_inside_git() {
+        let dir = std::env::temp_dir().join(format!("devrun-git-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let run = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .unwrap()
+        };
+        run(&["init", "-q", "-b", "trunk"]);
+        run(&["config", "user.email", "t@t"]);
+        run(&["config", "user.name", "t"]);
+        std::fs::write(dir.join("f"), "x").unwrap();
+        run(&["add", "."]);
+        run(&["commit", "-qm", "x"]);
+        let c = resolve(&dir.to_string_lossy()).unwrap();
+        assert!(c.in_git);
+        assert_eq!(c.branch, "trunk");
+        assert_eq!(c.project, crate::gitctx::base(&dir.to_string_lossy()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
