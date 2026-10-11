@@ -4,6 +4,7 @@ use crate::cli::{flag_err, help_printer, new_flag_set, CmdResult, Env};
 use crate::runner::{self, LogOpts};
 
 pub fn cmd_logs(env: &mut Env, args: &[String]) -> CmdResult {
+    eprintln!("DEBUG: made it here");
     let mut fs = new_flag_set(env, "logs");
     fs.bool_flag("f", false, "follow the log");
     fs.int_flag("n", 100, "number of trailing lines to show (0 for all)");

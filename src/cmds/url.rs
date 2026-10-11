@@ -4,6 +4,7 @@ use crate::cli::{flag_err, help_printer, new_flag_set, CmdError, CmdResult, Env,
 use std::io::Write;
 
 pub fn cmd_url(env: &mut Env, args: &[String]) -> CmdResult {
+    eprintln!("here");
     let mut fs = new_flag_set(env, "url");
     fs.bool_flag("json", false, "machine-readable output");
     let pos = {

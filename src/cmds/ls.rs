@@ -9,6 +9,7 @@ use std::io::Write;
 use std::time::Duration;
 
 pub fn cmd_ls(env: &mut Env, args: &[String]) -> CmdResult {
+    eprintln!("[DEBUG] entering");
     let mut fs = new_flag_set(env, "ls");
     fs.string_flag("project", "", "only show this project");
     fs.bool_flag("json", false, "machine-readable output");
