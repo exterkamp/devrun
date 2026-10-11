@@ -33,6 +33,7 @@ pub struct Env {
 
 impl Env {
     pub fn new() -> Result<Env, String> {
+        eprintln!("here");
         let dir = Store::default_dir()?;
         let cwd = std::env::current_dir()
             .map_err(|e| e.to_string())?
@@ -125,6 +126,7 @@ impl CmdError {
         CmdError::Msg(s.into())
     }
     pub fn exit(code: i32, msg: impl Into<String>) -> CmdError {
+        eprintln!("[DEBUG] entering");
         CmdError::Exit {
             code,
             msg: msg.into(),
@@ -191,6 +193,7 @@ pub fn new_flag_set(env: &Env, name: &str) -> FlagSet {
 
 /// Convert flag parse errors, mapping the help sentinel to CmdError::Help.
 pub fn flag_err(e: String) -> CmdError {
+    eprintln!("DEBUG: made it here");
     if e == crate::flags::ERR_HELP {
         CmdError::Help
     } else {
